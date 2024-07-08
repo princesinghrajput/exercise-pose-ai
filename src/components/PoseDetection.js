@@ -2,12 +2,13 @@ import React, { useRef, useEffect, useState } from "react";
 import * as tf from "@tensorflow/tfjs";
 import * as posedetection from "@tensorflow-models/pose-detection";
 import "@tensorflow/tfjs-backend-webgl";
+import { estimateSpinalPoints } from "../helpers/spinal-points";
 import {
+  normalizeKeypoints,
   calculateDistance,
   getDirection,
-  normalizeKeypoints,
-} from "./helpers/common";
-import { getReferencePose } from "./helpers/reference";
+} from "../helpers/common";
+import { getReferencePose } from "../helpers/reference";
 
 const PoseDetection = ({ stream, referenceKeypoints }) => {
   const videoRef = useRef(null);
@@ -16,22 +17,6 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
   const [feedback, setFeedback] = useState([]);
   const [stepCounter, setStepCounter] = useState(0);
   const [currentStep, setCurrentStep] = useState(0);
-
-  useEffect(() => {
-    const loadModel = async () => {
-      await tf.ready(); // Ensure TensorFlow.js is ready
-      await tf.setBackend("webgl"); // Set backend to WebGL
-
-      const detector = await posedetection.createDetector(
-        posedetection.SupportedModels.MoveNet,
-        {
-          modelType: posedetection.movenet.modelType.SINGLEPOSE_THUNDER,
-        }
-      );
-      setDetector(detector);
-    };
-    loadModel();
-  }, []);
 
   const comparePoses = (realTimeData, demoData) => {
     if (!realTimeData || !demoData)
@@ -105,6 +90,60 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
     }
   };
 
+  const drawKeypointsAndSkeleton = (keypoints, ctx) => {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // Draw keypoints
+    keypoints.forEach(({ x, y, score }) => {
+      if (score > 0.5) {
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = "red";
+        ctx.fill();
+      }
+    });
+
+    // Draw skeleton
+    const adjacentKeyPoints = posedetection.util.getAdjacentPairs(
+      posedetection.SupportedModels.MoveNet
+    );
+    adjacentKeyPoints.forEach(([i, j]) => {
+      const kp1 = keypoints[i];
+      const kp2 = keypoints[j];
+      if (kp1?.score > 0.5 && kp2?.score > 0.5) {
+        ctx.beginPath();
+        ctx.moveTo(kp1.x, kp1.y);
+        ctx.lineTo(kp2.x, kp2.y);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "white";
+        ctx.stroke();
+      }
+    });
+
+    const spineIndices = keypoints
+      .map((kp, idx) =>
+        kp.name === "upper_spine" ||
+        kp.name === "mid_spine" ||
+        kp.name === "lower_spine"
+          ? idx
+          : null
+      )
+      .filter((idx) => idx !== null);
+
+    for (let i = 0; i < spineIndices.length - 1; i++) {
+      const kp1 = keypoints[spineIndices[i]];
+      const kp2 = keypoints[spineIndices[i + 1]];
+      if (kp1.score > 0.5 && kp2.score > 0.5) {
+        ctx.beginPath();
+        ctx.moveTo(kp1.x, kp1.y);
+        ctx.lineTo(kp2.x, kp2.y);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "green";
+        ctx.stroke();
+      }
+    }
+  };
+
   useEffect(() => {
     if (detector && stream) {
       const video = videoRef.current;
@@ -139,7 +178,10 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
                 const comparisonResult = comparePoses(userPose, referencePose);
                 setFeedback(comparisonResult?.message ?? []);
                 updateStepCounter(comparisonResult?.isCorrect);
-                drawKeypointsAndSkeleton(userPose.keypoints, ctx);
+                let keypoints = [...userPose.keypoints];
+                const spinalPoints = estimateSpinalPoints(keypoints);
+                keypoints = [...keypoints, ...spinalPoints];
+                drawKeypointsAndSkeleton(keypoints, ctx);
               }
             }
           }
@@ -150,36 +192,21 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
     }
   }, [detector, stream, referenceKeypoints]);
 
-  const drawKeypointsAndSkeleton = (keypoints, ctx) => {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  useEffect(() => {
+    const loadModel = async () => {
+      await tf.ready(); // Ensure TensorFlow.js is ready
+      await tf.setBackend("webgl"); // Set backend to WebGL
 
-    // Draw keypoints
-    keypoints.forEach(({ x, y, score }) => {
-      if (score > 0.5) {
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = "red";
-        ctx.fill();
-      }
-    });
-
-    // Draw skeleton
-    const adjacentKeyPoints = posedetection.util.getAdjacentPairs(
-      posedetection.SupportedModels.MoveNet
-    );
-    adjacentKeyPoints.forEach(([i, j]) => {
-      const kp1 = keypoints[i];
-      const kp2 = keypoints[j];
-      if (kp1.score > 0.5 && kp2.score > 0.5) {
-        ctx.beginPath();
-        ctx.moveTo(kp1.x, kp1.y);
-        ctx.lineTo(kp2.x, kp2.y);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = "white";
-        ctx.stroke();
-      }
-    });
-  };
+      const detector = await posedetection.createDetector(
+        posedetection.SupportedModels.MoveNet,
+        {
+          modelType: posedetection.movenet.modelType.SINGLEPOSE_THUNDER,
+        }
+      );
+      setDetector(detector);
+    };
+    loadModel();
+  }, []);
 
   return (
     <div className="html-video-player">

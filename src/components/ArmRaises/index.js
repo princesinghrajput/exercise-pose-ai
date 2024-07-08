@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import CameraFeed from "./components/CameraFeed";
-import PoseDetection from "./components/PoseDetection";
+import CameraFeed from "./CameraFeed";
+import PoseDetection from "./PoseDetection";
 
-const App = () => {
+const ArmRaises = () => {
   const [stream, setStream] = useState(null);
 
   return (
@@ -15,4 +15,4 @@ const App = () => {
   );
 };
 
-export default App;
+export default ArmRaises;
