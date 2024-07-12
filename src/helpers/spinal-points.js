@@ -9,10 +9,14 @@ export const estimateSpinalPoints = (keypoints) => {
     };
   };
 
-  const leftShoulder = keypoints[11];
-  const rightShoulder = keypoints[12];
-  const leftHip = keypoints[23];
-  const rightHip = keypoints[24];
+  const leftShoulder = keypoints.filter(
+    (item) => item.name === "left_shoulder"
+  )[0];
+  const rightShoulder = keypoints.filter(
+    (item) => item.name === "right_shoulder"
+  )[0];
+  const leftHip = keypoints.filter((item) => item.name === "left_hip")[0];
+  const rightHip = keypoints.filter((item) => item.name === "right_hip")[0];
 
   const upperSpine = getMidpoint(leftShoulder, rightShoulder);
   if (upperSpine) upperSpine.name = "upper_spine";

@@ -7,87 +7,100 @@ import {
   normalizeKeypoints,
   calculateDistance,
   getDirection,
+  calculateAngle,
+  fetchMajorAngles,
+  findKeypoint,
 } from "../helpers/common";
-import { getReferencePose } from "../helpers/reference";
+import { getReferencePose } from "../helpers/chair-stretches";
+import Loader from "../common/Loader";
 
-const PoseDetection = ({ stream, referenceKeypoints }) => {
+const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [detector, setDetector] = useState(null);
   const [feedback, setFeedback] = useState([]);
-  const [stepCounter, setStepCounter] = useState(0);
+  const [rep, setRep] = useState(0);
+  const [stateCheck, setStateCheck] = useState(false);
+  const stateRef = useRef(stateCheck);
   const [currentStep, setCurrentStep] = useState(0);
+  const [state, setState] = useState({
+    stage: 1,
+  });
+  const stageRef = useRef(state.stage); // Ref to store the latest stage value
+  const comparePoses = (realTime) => {
+    const userPose = realTime.keypoints;
+    const stage = stageRef.current;
+    if (!userPose) return { isCorrect: false, message: "Invalid pose data" };
 
-  const comparePoses = (realTimeData, demoData) => {
-    if (!realTimeData || !demoData)
-      return { isCorrect: false, message: "Invalid pose data" };
-    const userPose = normalizeKeypoints(realTimeData.keypoints, 704, 1244);
-    // Scale referencePose keypoints
-    const referencePose = normalizeKeypoints(
-      demoData,
-      currentStep === 1 ? 642 : 704,
-      1244
-    );
-
-    // const angle = handleComparison(userPose);
-    // console.log("Angle: ", angle);
-    // const imutableState = { ...state };
-    // if (angle > 160) {
-    //   imutableState.stage = "down";
-    //   imutableState.counter += 1;
-    // }
-    // if (angle < 90 && angle > 60 && imutableState.stage == "down") {
-    //   imutableState.stage = "up";
-    //   imutableState.counter += 1;
-    // }
-    // setState(imutableState);
-    let totalDistance = 0;
-    let feedbackMessages = [];
-
-    const correctionPoints = [
-      "left_shoulder",
-      "left_wrist",
-      "left_elbow",
-      "right_shoulder",
-      "right_wrist",
-      "right_elbow",
-    ];
-    for (let i = 0; i < userPose.length; i++) {
-      const userPoint = userPose[i];
-      if (correctionPoints.includes(userPoint.name)) {
-        const referencePoint = referencePose[i];
-        const distance = calculateDistance(userPoint, referencePoint);
-        totalDistance += distance;
-        if (currentStep === 1 ? distance >= 0.7 : distance >= 0.3) {
-          // Adjust threshold as needed
-          const direction = getDirection(userPoint, referencePoint);
-          feedbackMessages.push(
-            `Adjust ${referencePoint.name}: Move ${direction}`
-          );
+    let isCorrect = false;
+    let message = ["Good job!"];
+    if (!stateRef.current) {
+      let feedback_data = stepWiseFeedback(stageRef.current, userPose);
+      if (stage === 1 && feedback_data.length === 0) {
+        isCorrect = true;
+      } else if (stage === 2 && feedback_data.length === 1) {
+        isCorrect = true;
+      } else if (stage === 3 && feedback_data.length === 0) {
+        isCorrect = true;
+      }
+      message = isCorrect ? ["Good job!"] : feedback_data;
+      if (isCorrect) {
+        if (stageRef.current === 3) {
+          setRep((prevRep) => prevRep + 1);
         }
+        setState((prevState) => ({
+          ...prevState,
+          stage: stageRef.current > 3 ? 1 : stageRef.current + 1,
+        }));
+        setStateCheck(!stateCheck);
       }
     }
-    const averageDistance = totalDistance / correctionPoints.length;
-    const isCorrect =
-      currentStep === 1 ? averageDistance < 0.15 : averageDistance < 0.18; // Threshold for correctness
-
-    const message = isCorrect ? ["Good job!"] : feedbackMessages;
-
     return { isCorrect, message };
   };
 
-  const updateStepCounter = (isCorrect) => {
-    if (isCorrect) {
-      if (currentStep === 1) {
-        console.log("Counter Incremented: ", stepCounter + 1);
-        setStepCounter((prevState) => prevState + 1);
-        setCurrentStep(0);
-        return;
+  const stepWiseFeedback = (step, userPose) => {
+    let feedback_data = [];
+    const [
+      left_wrist_angle,
+      right_wrist_angle,
+      left_knee_angle,
+      right_knee_angle,
+    ] = fetchMajorAngles(userPose);
+    if (step === 1 || step === 3) {
+      if (left_wrist_angle < 170 || right_wrist_angle < 170) {
+        feedback_data.push("Straighten Your Arms");
+      } else {
+        feedback_data = feedback_data.filter(
+          (item) => item !== "Straighten Your Arms"
+        );
       }
-      console.log("Step Incremented: ", currentStep + 1);
-
-      setCurrentStep(currentStep + 1);
+      if (left_knee_angle < 170 || right_knee_angle < 170) {
+        feedback_data.push("Straighten Your Legs");
+      } else {
+        feedback_data = feedback_data.filter(
+          (item) => item !== "Straighten Your Legs"
+        );
+      }
+    } else if (step === 2) {
+      feedback_data.push("Keep your back straight");
+      if (left_wrist_angle < 170 || right_wrist_angle < 170) {
+        feedback_data.push("Straighten Your Arms");
+      } else {
+        feedback_data = feedback_data.filter(
+          (item) => item !== "Straighten Your Arms"
+        );
+      }
+      if (left_knee_angle < 70 || right_knee_angle < 70) {
+        feedback_data.push("Bend your legs less");
+      } else if (left_knee_angle > 140 || right_knee_angle > 140) {
+        feedback_data.push("Bend your legs more");
+      } else {
+        feedback_data = feedback_data.filter(
+          (item) => !item.includes("Bend your legs")
+        );
+      }
     }
+    return feedback_data;
   };
 
   const drawKeypointsAndSkeleton = (keypoints, ctx) => {
@@ -138,10 +151,46 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
         ctx.moveTo(kp1.x, kp1.y);
         ctx.lineTo(kp2.x, kp2.y);
         ctx.lineWidth = 2;
-        ctx.strokeStyle = "green";
+        ctx.strokeStyle = "white";
         ctx.stroke();
       }
     }
+
+    // Angles
+    const video = videoRef.current;
+    const normalizeKeypoint = normalizeKeypoints(
+      keypoints,
+      ctx.canvas.height,
+      ctx.canvas.width
+    );
+    const [
+      left_wrist_angle,
+      right_wrist_angle,
+      left_knee_angle,
+      right_knee_angle,
+    ] = fetchMajorAngles(normalizeKeypoint);
+
+    const drawAngle = (angle, x, y) => {
+      ctx.fillStyle = "yellow";
+      ctx.font = "22px Arial";
+      ctx.fillText(angle.toFixed(1) + "°", x, y);
+    };
+
+    const left_wrist_point = findKeypoint(keypoints, "left_elbow");
+    if (left_wrist_point && left_wrist_point.score > 0.5)
+      drawAngle(left_wrist_angle, left_wrist_point?.x, left_wrist_point?.y);
+
+    const right_wrist_point = findKeypoint(keypoints, "right_elbow");
+    if (right_wrist_point && right_wrist_point.score > 0.5)
+      drawAngle(right_wrist_angle, right_wrist_point?.x, right_wrist_point?.y);
+
+    const left_knee_point = findKeypoint(keypoints, "left_knee");
+    if (left_knee_point && left_knee_point.score > 0.5)
+      drawAngle(left_knee_angle, left_knee_point?.x, left_knee_point?.y);
+
+    const right_knee_point = findKeypoint(keypoints, "right_knee");
+    if (right_knee_point && right_knee_point.score > 0.5)
+      drawAngle(right_knee_angle, right_knee_point?.x, right_knee_point?.y);
   };
 
   useEffect(() => {
@@ -175,9 +224,18 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
               if (poses && poses.length > 0) {
                 const userPose = poses[0];
                 const referencePose = getReferencePose(currentStep);
-                const comparisonResult = comparePoses(userPose, referencePose);
+                const comparisonResult = comparePoses(
+                  {
+                    keypoints: normalizeKeypoints(
+                      userPose.keypoints,
+                      canvasCurrent.height,
+                      canvasCurrent.width
+                    ),
+                  },
+                  referencePose
+                );
                 setFeedback(comparisonResult?.message ?? []);
-                updateStepCounter(comparisonResult?.isCorrect);
+                // updateStepCounter(comparisonResult?.isCorrect);
                 let keypoints = [...userPose.keypoints];
                 const spinalPoints = estimateSpinalPoints(keypoints);
                 keypoints = [...keypoints, ...spinalPoints];
@@ -193,6 +251,17 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
   }, [detector, stream, referenceKeypoints]);
 
   useEffect(() => {
+    stageRef.current = stageRef.current >= 3 ? 1 : stageRef.current + 1;
+  }, [state.stage]);
+
+  useEffect(() => {
+    stateRef.current = true;
+    setTimeout(() => {
+      stateRef.current = false;
+    }, 10000);
+  }, [stateCheck]);
+
+  useEffect(() => {
     const loadModel = async () => {
       await tf.ready(); // Ensure TensorFlow.js is ready
       await tf.setBackend("webgl"); // Set backend to WebGL
@@ -204,19 +273,29 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
         }
       );
       setDetector(detector);
+      // setState({ ...state, loading: false });
+      // setLoading(false);
     };
+    setLoading(true);
     loadModel();
   }, []);
 
   return (
     <div className="html-video-player">
-      <div style={{ position: "relative", maxWidth: "350px" }}>
+      {loading ? <Loader /> : null}
+      <div
+        style={{
+          position: "relative",
+          maxWidth: "350px",
+          display: loading ? "none" : "block",
+        }}
+      >
         <video
           ref={videoRef}
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
+            // position: "absolute",
+            // top: 0,
+            // left: 0,
             width: "100%",
             height: "auto",
           }}
@@ -237,20 +316,42 @@ const PoseDetection = ({ stream, referenceKeypoints }) => {
           width="640"
           height="480"
         />
-        <div style={{ position: "absolute", bottom: "-450px", left: 0 }}>
-          <p>Step Counter: {stepCounter}</p>
-          <p style={{ color: "red" }}>
-            Feedback:{" "}
-            {feedback && Array.isArray(feedback) && feedback.length
-              ? feedback.map((item, index) => {
-                  return (
-                    <span key={index}>
-                      {item} <br />
-                    </span>
-                  );
-                })
-              : JSON.stringify(feedback)}
+        <div
+          style={{
+            border: "2px solid #fff",
+            position: "absolute",
+            bottom: "20px",
+            color: "#fff",
+            left: 0,
+            right: 0,
+          }}
+        >
+          {/* <p style={{ fontWeight: "bolder" }}>
+            Current Stage: {stageRef.current}
           </p>
+          <p>Rep: {rep}</p>
+          {stateRef.current ? (
+            <p
+              style={{
+                color: "green",
+                fontWeight: "bolder",
+              }}
+            >
+              Hold this position for 5 Seconds
+            </p>
+          ) : null} */}
+          <p>Rep: {rep}</p>
+          {feedback && Array.isArray(feedback) && feedback.length ? (
+            <p
+              style={{
+                color: feedback.includes("Good job!") ? "green" : "red",
+                // fontWeight: "bolder",
+              }}
+            >
+              Feedback:
+              {feedback.join(", ")}
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

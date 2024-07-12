@@ -1,16 +1,20 @@
-export function calculateAngle(a, b, c) {
-  // Convert points into objects for clarity
-  let A = { x: a.x, y: a.y };
-  let B = { x: b.x, y: b.y };
-  let C = { x: c.x, y: c.y };
+export const calculateAngle = (p1, p2, p3) => {
+  const vector1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+  const vector2 = { x: p3.x - p2.x, y: p3.y - p2.y };
 
-  // Calculate the angles using Math.atan2
-  let angleRad =
-    Math.atan2(C.y - B.y, C.x - B.x) - Math.atan2(A.y - B.y, A.x - B.x);
-  let angleDeg = Math.abs((angleRad * 180.0) / Math.PI);
+  const dotProduct = vector1.x * vector2.x + vector1.y * vector2.y;
+  const magnitude1 = Math.sqrt(vector1.x ** 2 + vector1.y ** 2);
+  const magnitude2 = Math.sqrt(vector2.x ** 2 + vector2.y ** 2);
 
-  return 180 - angleDeg;
-}
+  let angle =
+    Math.acos(dotProduct / (magnitude1 * magnitude2)) * (180 / Math.PI);
+
+  if (isNaN(angle)) {
+    angle = 0; // Handle edge cases
+  }
+
+  return angle;
+};
 
 export const handleComparison = (keypoints) => {
   try {
@@ -62,3 +66,36 @@ export const normalizeKeypoints = (keypoints, height, width) => {
     y: kp.y / height,
   }));
 };
+
+export const fetchMajorAngles = (keypoints) => {
+  const left_wrist_angle = calculateAngle(
+    findKeypoint(keypoints, "left_shoulder"),
+    findKeypoint(keypoints, "left_elbow"),
+    findKeypoint(keypoints, "left_wrist")
+  );
+  const right_wrist_angle = calculateAngle(
+    findKeypoint(keypoints, "right_shoulder"),
+    findKeypoint(keypoints, "right_elbow"),
+    findKeypoint(keypoints, "right_wrist")
+  );
+  const left_knee_angle = calculateAngle(
+    findKeypoint(keypoints, "left_hip"),
+    findKeypoint(keypoints, "left_knee"),
+    findKeypoint(keypoints, "left_ankle")
+  );
+  const right_knee_angle = calculateAngle(
+    findKeypoint(keypoints, "right_hip"),
+    findKeypoint(keypoints, "right_knee"),
+    findKeypoint(keypoints, "right_ankle")
+  );
+
+  return [
+    left_wrist_angle,
+    right_wrist_angle,
+    left_knee_angle,
+    right_knee_angle,
+  ];
+};
+
+export const findKeypoint = (keypoints, name) =>
+  keypoints.find((kp) => kp.name === name);

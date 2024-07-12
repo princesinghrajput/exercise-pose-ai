@@ -1,18 +1,21 @@
-import React, { useState } from "react";
-import CameraFeed from "./components/CameraFeed";
-import PoseDetection from "./components/PoseDetection";
+import React from "react";
+import KeypointExtractor from "./components/KeypointsExtractor";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import Home from "./pages/Home/Home";
 
 const App = () => {
-  const [stream, setStream] = useState(null);
+  const router = createBrowserRouter([
+    {
+      path: "/",
+      element: <Home />,
+    },
+    {
+      path: "/keypoint-extractor",
+      element: <KeypointExtractor />,
+    },
+  ]);
 
-  return (
-    <div>
-      <div className="video-container">
-        <CameraFeed onStream={setStream} />
-        {stream && <PoseDetection stream={stream} />}
-      </div>
-    </div>
-  );
+  return <RouterProvider router={router} />;
 };
 
 export default App;
