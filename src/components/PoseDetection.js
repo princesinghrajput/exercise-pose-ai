@@ -274,7 +274,7 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
       );
       setDetector(detector);
       // setState({ ...state, loading: false });
-      // setLoading(false);
+      setLoading(false);
     };
     setLoading(true);
     loadModel();
@@ -299,8 +299,8 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
             width: "100%",
             height: "auto",
           }}
-          width="640"
-          height="480"
+          width="800"
+          height="700"
           autoPlay
           playsInline
         />
@@ -313,17 +313,17 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
             width: "100%",
             height: "auto",
           }}
-          width="640"
-          height="480"
+          width="800"
+          height="700"
         />
         <div
           style={{
-            border: "2px solid #fff",
             position: "absolute",
-            bottom: "20px",
+            bottom: "0px",
             color: "#fff",
             left: 0,
             right: 0,
+            background: "rgba(0, 0, 0, 0.6)",
           }}
         >
           {/* <p style={{ fontWeight: "bolder" }}>
@@ -344,7 +344,7 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
           {feedback && Array.isArray(feedback) && feedback.length ? (
             <p
               style={{
-                color: feedback.includes("Good job!") ? "green" : "red",
+                color: feedback.includes("Good job!") ? "green" : "white",
                 // fontWeight: "bolder",
               }}
             >

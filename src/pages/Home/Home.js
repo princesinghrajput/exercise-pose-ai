@@ -23,7 +23,7 @@ const Home = () => {
             )}
           </div>
         </div>
-        {loading ? (
+        {!loading ? (
           <video
             src={DemoVideo}
             style={{
