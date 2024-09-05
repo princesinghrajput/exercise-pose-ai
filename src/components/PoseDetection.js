@@ -31,36 +31,6 @@ const PoseDetection = ({
   });
   const stageRef = useRef(state.stage);
 
-  const comparePoses = (realTime) => {
-    const userPose = realTime.keypoints;
-    const stage = stageRef.current;
-    if (!userPose) return { isCorrect: false, message: "Invalid pose data" };
-    let isCorrect = false;
-    let message = ["Good job!"];
-    if (!stateRef.current) {
-      let feedback_data = stepWiseFeedback(stageRef.current, userPose);
-      if (stage === 1 && feedback_data.length === 0) {
-        isCorrect = true;
-      } else if (stage === 2 && feedback_data.length === 1) {
-        isCorrect = true;
-      } else if (stage === 3 && feedback_data.length === 0) {
-        isCorrect = true;
-      }
-      message = isCorrect ? ["Good job!"] : feedback_data;
-      if (isCorrect) {
-        if (stageRef.current === 3) {
-          setRep((prevRep) => prevRep + 1);
-        }
-        setState((prevState) => ({
-          ...prevState,
-          stage: stageRef.current > 3 ? 1 : stageRef.current + 1,
-        }));
-        setStateCheck(!stateCheck);
-      }
-    }
-    return { isCorrect, message };
-  };
-
   const stepWiseFeedback = (step, userPose) => {
     let feedback_data = [];
     const [
@@ -77,17 +47,13 @@ const PoseDetection = ({
       right_knee_angle,
     };
 
-    const conditions = exercise.feedback[step];
+    const conditions = exercise.feedback[step] || []; // Ensure conditions are an array
 
     conditions.forEach((condition) => {
       if (condition.condition) {
-        let conditionMet = false;
-
-        Object.keys(condition.condition).forEach((key) => {
+        let conditionMet = Object.keys(condition.condition).every((key) => {
           const [operator, value] = condition.condition[key].split(" ");
-          if (evaluateCondition(angles[key], operator, parseFloat(value))) {
-            conditionMet = true;
-          }
+          return evaluateCondition(angles[key], operator, parseFloat(value));
         });
 
         if (conditionMet) {
@@ -102,6 +68,36 @@ const PoseDetection = ({
       }
     });
     return feedback_data;
+  };
+
+  const comparePoses = (realTime) => {
+    const userPose = realTime.keypoints;
+    const stage = stageRef.current;
+    if (!userPose) return { isCorrect: false, message: "Invalid pose data" };
+    let isCorrect = false;
+    let message = ["Good job!"];
+    if (!stateRef.current) {
+      const feedback_data = stepWiseFeedback(stageRef.current, userPose);
+      if (
+        (stage === 1 && feedback_data.length === 0) ||
+        (stage === 2 && feedback_data.length === 1) ||
+        (stage === 3 && feedback_data.length === 0)
+      ) {
+        isCorrect = true;
+      }
+      message = isCorrect ? ["Good job!"] : feedback_data;
+      if (isCorrect) {
+        if (stageRef.current === 3) {
+          setRep((prevRep) => prevRep + 1);
+        }
+        setState((prevState) => ({
+          ...prevState,
+          stage: stageRef.current > 3 ? 1 : stageRef.current + 1,
+        }));
+        setStateCheck(!stateCheck);
+      }
+    }
+    return { isCorrect, message };
   };
 
   const drawKeypointsAndSkeleton = (keypoints, ctx) => {
@@ -158,7 +154,6 @@ const PoseDetection = ({
     }
 
     // Angles
-    const video = videoRef.current;
     const normalizeKeypoint = normalizeKeypoints(
       keypoints,
       ctx.canvas.height,
@@ -206,12 +201,11 @@ const PoseDetection = ({
         }
       );
       setDetector(detector);
-      // setState({ ...state, loading: false });
       setLoading(false);
     };
     setLoading(true);
     loadModel();
-  }, []);
+  }, [setLoading]);
 
   useEffect(() => {
     if (detector && stream) {
@@ -238,22 +232,16 @@ const PoseDetection = ({
                 canvasCurrent.height
               );
 
-              const poses = detector
-                ? await detector?.estimatePoses(video)
-                : [];
-              if (poses && poses.length > 0) {
+              if (poses.length > 0) {
                 const userPose = poses[0];
                 const referencePose = getReferencePose(0);
-                const comparisonResult = comparePoses(
-                  {
-                    keypoints: normalizeKeypoints(
-                      userPose.keypoints,
-                      canvasCurrent.height,
-                      canvasCurrent.width
-                    ),
-                  },
-                  referencePose
-                );
+                const comparisonResult = comparePoses({
+                  keypoints: normalizeKeypoints(
+                    userPose.keypoints,
+                    canvasCurrent.height,
+                    canvasCurrent.width
+                  ),
+                });
                 setFeedback(comparisonResult?.message ?? []);
                 let keypoints = [...userPose.keypoints];
                 const spinalPoints = estimateSpinalPoints(keypoints);
@@ -270,14 +258,15 @@ const PoseDetection = ({
   }, [detector, stream, referenceKeypoints]);
 
   useEffect(() => {
-    stageRef.current = stageRef.current >= 3 ? 1 : stageRef.current + 1;
+    stageRef.current = state.stage;
   }, [state.stage]);
 
   useEffect(() => {
     stateRef.current = true;
-    setTimeout(() => {
+    const timeout = setTimeout(() => {
       stateRef.current = false;
     }, 10000);
+    return () => clearTimeout(timeout);
   }, [stateCheck]);
 
   if (loading) return <Loader />;
@@ -294,9 +283,6 @@ const PoseDetection = ({
         <video
           ref={videoRef}
           style={{
-            // position: "absolute",
-            // top: 0,
-            // left: 0,
             width: "100%",
             height: "auto",
           }}
@@ -328,30 +314,14 @@ const PoseDetection = ({
             background: "rgba(0, 0, 0, 0.6)",
           }}
         >
-          {/* <p style={{ fontWeight: "bolder" }}>
-            Current Stage: {stageRef.current}
-          </p>
-          <p>Rep: {rep}</p>
-          {stateRef.current ? (
-            <p
-              style={{
-                color: "green",
-                fontWeight: "bolder",
-              }}
-            >
-              Hold this position for 5 Seconds
-            </p>
-          ) : null} */}
           <p>Rep: {rep}</p>
           {feedback && Array.isArray(feedback) && feedback.length ? (
             <p
               style={{
                 color: feedback.includes("Good job!") ? "green" : "white",
-                // fontWeight: "bolder",
               }}
             >
-              Feedback:
-              {feedback.join(", ")}
+              Feedback: {feedback.join(", ")}
             </p>
           ) : null}
         </div>
