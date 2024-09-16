@@ -10,7 +10,7 @@ export const calculateAngle = (p1, p2, p3) => {
     Math.acos(dotProduct / (magnitude1 * magnitude2)) * (180 / Math.PI);
 
   if (isNaN(angle)) {
-    angle = 0; // Handle edge cases
+    angle = 0;
   }
 
   return angle;
@@ -88,14 +88,39 @@ export const fetchMajorAngles = (keypoints) => {
     findKeypoint(keypoints, "right_knee"),
     findKeypoint(keypoints, "right_ankle")
   );
+  const left_shoulder_angle = calculateAngle(
+    findKeypoint(keypoints, "left_hip"),
+    findKeypoint(keypoints, "left_shoulder"),
+    findKeypoint(keypoints, "left_elbow")
+  );
+  const right_shoulder_angle = calculateAngle(
+    findKeypoint(keypoints, "right_hip"),
+    findKeypoint(keypoints, "right_shoulder"),
+    findKeypoint(keypoints, "right_elbow")
+  );
 
   return [
     left_wrist_angle,
     right_wrist_angle,
     left_knee_angle,
     right_knee_angle,
+    left_shoulder_angle,
+    right_shoulder_angle,
   ];
 };
 
 export const findKeypoint = (keypoints, name) =>
   keypoints.find((kp) => kp.name === name);
+
+export const evaluateCondition = (angle, operator, value) => {
+  switch (operator) {
+    case "<":
+      return angle < value;
+    case ">":
+      return angle > value;
+    case "==":
+      return angle == value;
+    default:
+      return false;
+  }
+};
