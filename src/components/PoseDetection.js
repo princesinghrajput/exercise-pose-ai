@@ -31,75 +31,101 @@ const PoseDetection = ({
   });
   const stageRef = useRef(state.stage);
 
+  console.log("Exercise poses length", exercise.poses.length)
+
+  const defaultFeedback = {
+    notStarted: "Exercise has not started. Please get ready.",
+    incorrectPose: "Please adjust your posture.",
+  };
+
+  const comparePoses = (realTime) => {
+    const userPose = realTime.keypoints;
+    const stage = stageRef.current;
+  
+    if (!userPose) return { isCorrect: false, message: [defaultFeedback.incorrectPose] };
+  
+    let isCorrect = false;
+    let message = [defaultFeedback.incorrectPose];
+  
+    // Use stateRef to prevent continuous feedback updates
+    if (!stateRef.current) {
+      // Get feedback data for the current stage
+      let feedback_data = stepWiseFeedback(stageRef.current, userPose);
+  
+      // Improve conditions to handle transitions more accurately
+      if (stage === 1 && feedback_data.length === 0) {
+        isCorrect = true;
+      } else if (stage === 2 && feedback_data.length === 1) {
+        isCorrect = true;
+      } else if (stage === 3 && feedback_data.length === 0) {
+        isCorrect = true;
+      }
+  
+      // Provide feedback based on correctness
+      message = isCorrect ? ["Good job!"] : feedback_data;
+  
+      // If the posture is correct, increment reps and progress to the next stage
+      if (isCorrect) {
+        if (stageRef.current === 3) {
+          setRep((prevRep) => prevRep + 1);
+        }
+  
+        // Only transition to the next stage if the current one is completed
+        setState((prevState) => ({
+          ...prevState,
+          stage: stageRef.current >= 3 ? 1 : stageRef.current + 1,
+        }));
+  
+        // Flip stateCheck to debounce feedback changes
+        setStateCheck(!stateCheck);
+      }
+    } else {
+      message = [defaultFeedback.notStarted];
+    }
+  
+    return { isCorrect, message };
+  };
+  
+
   const stepWiseFeedback = (step, userPose) => {
     let feedback_data = [];
-    const [
-      left_wrist_angle,
-      right_wrist_angle,
-      left_knee_angle,
-      right_knee_angle,
-    ] = fetchMajorAngles(userPose);
-
+    
+    // Fetch angles from the user's pose
+    const [left_wrist_angle, right_wrist_angle, left_knee_angle, right_knee_angle] = fetchMajorAngles(userPose);
+  
     const angles = {
       left_wrist_angle,
       right_wrist_angle,
       left_knee_angle,
       right_knee_angle,
     };
-
-    const conditions = exercise.feedback[step] || []; // Ensure conditions are an array
-
+  
+    // Get feedback conditions for the current step
+    const conditions = exercise.feedback[step] || [];
+  
+    // Loop through conditions to evaluate them against the user's pose
     conditions.forEach((condition) => {
       if (condition.condition) {
+        // Check if all conditions for this step are met
         let conditionMet = Object.keys(condition.condition).every((key) => {
           const [operator, value] = condition.condition[key].split(" ");
           return evaluateCondition(angles[key], operator, parseFloat(value));
         });
-
+  
+        // Add or remove feedback based on condition result
         if (conditionMet) {
           feedback_data.push(condition.feedback);
         } else {
-          feedback_data = feedback_data.filter(
-            (item) => item !== condition.feedback
-          );
+          feedback_data = feedback_data.filter(item => item !== condition.feedback);
         }
       } else {
         feedback_data.push(condition.feedback);
       }
     });
+  
     return feedback_data;
   };
-
-  const comparePoses = (realTime) => {
-    const userPose = realTime.keypoints;
-    const stage = stageRef.current;
-    if (!userPose) return { isCorrect: false, message: "Invalid pose data" };
-    let isCorrect = false;
-    let message = ["Good job!"];
-    if (!stateRef.current) {
-      const feedback_data = stepWiseFeedback(stageRef.current, userPose);
-      if (
-        (stage === 1 && feedback_data.length === 0) ||
-        (stage === 2 && feedback_data.length === 1) ||
-        (stage === 3 && feedback_data.length === 0)
-      ) {
-        isCorrect = true;
-      }
-      message = isCorrect ? ["Good job!"] : feedback_data;
-      if (isCorrect) {
-        if (stageRef.current === 3) {
-          setRep((prevRep) => prevRep + 1);
-        }
-        setState((prevState) => ({
-          ...prevState,
-          stage: stageRef.current > 3 ? 1 : stageRef.current + 1,
-        }));
-        setStateCheck(!stateCheck);
-      }
-    }
-    return { isCorrect, message };
-  };
-
+  
   const drawKeypointsAndSkeleton = (keypoints, ctx) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
@@ -154,6 +180,7 @@ const PoseDetection = ({
     }
 
     // Angles
+    const video = videoRef.current;
     const normalizeKeypoint = normalizeKeypoints(
       keypoints,
       ctx.canvas.height,
@@ -205,7 +232,7 @@ const PoseDetection = ({
     };
     setLoading(true);
     loadModel();
-  }, [setLoading]);
+  }, []);
 
   useEffect(() => {
     if (detector && stream) {
@@ -232,22 +259,23 @@ const PoseDetection = ({
                 canvasCurrent.height
               );
 
-              if (poses.length > 0) {
-                const userPose = poses[0];
-                const referencePose = getReferencePose(0);
-                const comparisonResult = comparePoses({
+              const userPose = poses[0];
+              const referencePose = getReferencePose(0);
+              const comparisonResult = comparePoses(
+                {
                   keypoints: normalizeKeypoints(
                     userPose.keypoints,
                     canvasCurrent.height,
                     canvasCurrent.width
                   ),
-                });
-                setFeedback(comparisonResult?.message ?? []);
-                let keypoints = [...userPose.keypoints];
-                const spinalPoints = estimateSpinalPoints(keypoints);
-                keypoints = [...keypoints, ...spinalPoints];
-                drawKeypointsAndSkeleton(keypoints, ctx);
-              }
+                },
+                referencePose
+              );
+              setFeedback(comparisonResult?.message ?? []);
+              let keypoints = [...userPose.keypoints];
+              const spinalPoints = estimateSpinalPoints(keypoints);
+              keypoints = [...keypoints, ...spinalPoints];
+              drawKeypointsAndSkeleton(keypoints, ctx);
             }
           }
           requestAnimationFrame(detectPose);
@@ -263,10 +291,9 @@ const PoseDetection = ({
 
   useEffect(() => {
     stateRef.current = true;
-    const timeout = setTimeout(() => {
+    setTimeout(() => {
       stateRef.current = false;
     }, 10000);
-    return () => clearTimeout(timeout);
   }, [stateCheck]);
 
   if (loading) return <Loader />;
@@ -323,7 +350,9 @@ const PoseDetection = ({
             >
               Feedback: {feedback.join(", ")}
             </p>
-          ) : null}
+          ) : (
+            <p>{defaultFeedback.notStarted}</p>
+          )}
         </div>
       </div>
     </div>
