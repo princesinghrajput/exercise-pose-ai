@@ -5,16 +5,20 @@ import "@tensorflow/tfjs-backend-webgl";
 import { estimateSpinalPoints } from "../helpers/spinal-points";
 import {
   normalizeKeypoints,
-  calculateDistance,
-  getDirection,
-  calculateAngle,
   fetchMajorAngles,
   findKeypoint,
+  evaluateCondition,
 } from "../helpers/common";
 import { getReferencePose } from "../helpers/chair-stretches";
 import Loader from "../common/Loader";
 
-const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
+const PoseDetection = ({
+  stream,
+  referenceKeypoints,
+  loading,
+  setLoading,
+  exercise,
+}) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [detector, setDetector] = useState(null);
@@ -22,91 +26,95 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
   const [rep, setRep] = useState(0);
   const [stateCheck, setStateCheck] = useState(false);
   const stateRef = useRef(stateCheck);
-  const [currentStep, setCurrentStep] = useState(0);
   const [state, setState] = useState({
     stage: 1,
   });
-  const stageRef = useRef(state.stage); // Ref to store the latest stage value
+  const stageRef = useRef(state.stage);
+
+  const totalStages = exercise.poses.length;
+
+  console.log("Exercise poses length", totalStages);
+  console.log('Repitions', rep)
+
+  const defaultFeedback = {
+    notStarted: "Exercise has not started. Please get ready.",
+    incorrectPose: "Please adjust your posture.",
+  };
+
   const comparePoses = (realTime) => {
     const userPose = realTime.keypoints;
     const stage = stageRef.current;
-    if (!userPose) return { isCorrect: false, message: "Invalid pose data" };
-
+  
+    if (!userPose) return { isCorrect: false, message: [defaultFeedback.incorrectPose] };
+  
     let isCorrect = false;
-    let message = ["Good job!"];
+    let message = [defaultFeedback.incorrectPose];
+  
     if (!stateRef.current) {
       let feedback_data = stepWiseFeedback(stageRef.current, userPose);
-      if (stage === 1 && feedback_data.length === 0) {
-        isCorrect = true;
-      } else if (stage === 2 && feedback_data.length === 1) {
-        isCorrect = true;
-      } else if (stage === 3 && feedback_data.length === 0) {
-        isCorrect = true;
-      }
+  
+      isCorrect = feedback_data.length === 0;
       message = isCorrect ? ["Good job!"] : feedback_data;
+  
       if (isCorrect) {
-        if (stageRef.current === 3) {
+        if (stageRef.current === totalStages) {
           setRep((prevRep) => prevRep + 1);
+          setState((prevState) => ({
+            ...prevState,
+            stage: 1, // Reset stage
+          }));
+        } else {
+          setState((prevState) => ({
+            ...prevState,
+            stage: stageRef.current + 1,
+          }));
         }
-        setState((prevState) => ({
-          ...prevState,
-          stage: stageRef.current > 3 ? 1 : stageRef.current + 1,
-        }));
         setStateCheck(!stateCheck);
       }
+    } else {
+      message = [defaultFeedback.notStarted];
     }
+  
     return { isCorrect, message };
   };
 
   const stepWiseFeedback = (step, userPose) => {
     let feedback_data = [];
-    const [
+    
+    const [left_wrist_angle, right_wrist_angle, left_knee_angle, right_knee_angle] = fetchMajorAngles(userPose);
+  
+    const angles = {
       left_wrist_angle,
       right_wrist_angle,
       left_knee_angle,
       right_knee_angle,
-    ] = fetchMajorAngles(userPose);
-    if (step === 1 || step === 3) {
-      if (left_wrist_angle < 170 || right_wrist_angle < 170) {
-        feedback_data.push("Straighten Your Arms");
+    };
+  
+    const conditions = exercise.feedback[step] || [];
+  
+    conditions.forEach((condition) => {
+      if (condition.condition) {
+        let conditionMet = Object.keys(condition.condition).every((key) => {
+          const [operator, value] = condition.condition[key].split(" ");
+          return evaluateCondition(angles[key], operator, parseFloat(value));
+        });
+  
+        if (conditionMet) {
+          feedback_data.push(condition.feedback);
+        } else {
+          feedback_data = feedback_data.filter(item => item !== condition.feedback);
+        }
       } else {
-        feedback_data = feedback_data.filter(
-          (item) => item !== "Straighten Your Arms"
-        );
+        feedback_data.push(condition.feedback);
       }
-      if (left_knee_angle < 170 || right_knee_angle < 170) {
-        feedback_data.push("Straighten Your Legs");
-      } else {
-        feedback_data = feedback_data.filter(
-          (item) => item !== "Straighten Your Legs"
-        );
-      }
-    } else if (step === 2) {
-      feedback_data.push("Keep your back straight");
-      if (left_wrist_angle < 170 || right_wrist_angle < 170) {
-        feedback_data.push("Straighten Your Arms");
-      } else {
-        feedback_data = feedback_data.filter(
-          (item) => item !== "Straighten Your Arms"
-        );
-      }
-      if (left_knee_angle < 70 || right_knee_angle < 70) {
-        feedback_data.push("Bend your legs less");
-      } else if (left_knee_angle > 140 || right_knee_angle > 140) {
-        feedback_data.push("Bend your legs more");
-      } else {
-        feedback_data = feedback_data.filter(
-          (item) => !item.includes("Bend your legs")
-        );
-      }
-    }
+    });
+  
     return feedback_data;
   };
 
   const drawKeypointsAndSkeleton = (keypoints, ctx) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-    // Draw keypoints
     keypoints.forEach(({ x, y, score }) => {
       if (score > 0.5) {
         ctx.beginPath();
@@ -116,7 +124,6 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
       }
     });
 
-    // Draw skeleton
     const adjacentKeyPoints = posedetection.util.getAdjacentPairs(
       posedetection.SupportedModels.MoveNet
     );
@@ -156,7 +163,6 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
       }
     }
 
-    // Angles
     const video = videoRef.current;
     const normalizeKeypoint = normalizeKeypoints(
       keypoints,
@@ -194,6 +200,24 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
   };
 
   useEffect(() => {
+    const loadModel = async () => {
+      await tf.ready();
+      await tf.setBackend("webgl");
+
+      const detector = await posedetection.createDetector(
+        posedetection.SupportedModels.MoveNet,
+        {
+          modelType: posedetection.movenet.modelType.SINGLEPOSE_THUNDER,
+        }
+      );
+      setDetector(detector);
+      setLoading(false);
+    };
+    setLoading(true);
+    loadModel();
+  }, []);
+
+  useEffect(() => {
     if (detector && stream) {
       const video = videoRef.current;
       video.srcObject = stream;
@@ -218,29 +242,23 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
                 canvasCurrent.height
               );
 
-              const poses = detector
-                ? await detector?.estimatePoses(video)
-                : [];
-              if (poses && poses.length > 0) {
-                const userPose = poses[0];
-                const referencePose = getReferencePose(currentStep);
-                const comparisonResult = comparePoses(
-                  {
-                    keypoints: normalizeKeypoints(
-                      userPose.keypoints,
-                      canvasCurrent.height,
-                      canvasCurrent.width
-                    ),
-                  },
-                  referencePose
-                );
-                setFeedback(comparisonResult?.message ?? []);
-                // updateStepCounter(comparisonResult?.isCorrect);
-                let keypoints = [...userPose.keypoints];
-                const spinalPoints = estimateSpinalPoints(keypoints);
-                keypoints = [...keypoints, ...spinalPoints];
-                drawKeypointsAndSkeleton(keypoints, ctx);
-              }
+              const userPose = poses[0];
+              const referencePose = getReferencePose(state.stage - 1);
+              const comparisonResult = comparePoses(
+                {
+                  keypoints: normalizeKeypoints(
+                    userPose.keypoints,
+                    canvasCurrent.height,
+                    canvasCurrent.width
+                  ),
+                },
+                referencePose
+              );
+              setFeedback(comparisonResult?.message ?? []);
+              let keypoints = [...userPose.keypoints];
+              const spinalPoints = estimateSpinalPoints(keypoints);
+              keypoints = [...keypoints, ...spinalPoints];
+              drawKeypointsAndSkeleton(keypoints, ctx);
             }
           }
           requestAnimationFrame(detectPose);
@@ -251,7 +269,7 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
   }, [detector, stream, referenceKeypoints]);
 
   useEffect(() => {
-    stageRef.current = stageRef.current >= 3 ? 1 : stageRef.current + 1;
+    stageRef.current = state.stage;
   }, [state.stage]);
 
   useEffect(() => {
@@ -261,28 +279,10 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
     }, 10000);
   }, [stateCheck]);
 
-  useEffect(() => {
-    const loadModel = async () => {
-      await tf.ready(); // Ensure TensorFlow.js is ready
-      await tf.setBackend("webgl"); // Set backend to WebGL
-
-      const detector = await posedetection.createDetector(
-        posedetection.SupportedModels.MoveNet,
-        {
-          modelType: posedetection.movenet.modelType.SINGLEPOSE_THUNDER,
-        }
-      );
-      setDetector(detector);
-      // setState({ ...state, loading: false });
-      setLoading(false);
-    };
-    setLoading(true);
-    loadModel();
-  }, []);
+  if (loading) return <Loader />;
 
   return (
     <div className="html-video-player">
-      {loading ? <Loader /> : null}
       <div
         style={{
           position: "relative",
@@ -293,9 +293,6 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
         <video
           ref={videoRef}
           style={{
-            // position: "absolute",
-            // top: 0,
-            // left: 0,
             width: "100%",
             height: "auto",
           }}
@@ -312,6 +309,7 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
             left: 0,
             width: "100%",
             height: "auto",
+            transform: "rotateY(180deg)",
           }}
           width="800"
           height="700"
@@ -319,39 +317,25 @@ const PoseDetection = ({ stream, referenceKeypoints, loading, setLoading }) => {
         <div
           style={{
             position: "absolute",
-            bottom: "0px",
+            bottom: "5px",
             color: "#fff",
             left: 0,
             right: 0,
             background: "rgba(0, 0, 0, 0.6)",
           }}
         >
-          {/* <p style={{ fontWeight: "bolder" }}>
-            Current Stage: {stageRef.current}
-          </p>
-          <p>Rep: {rep}</p>
-          {stateRef.current ? (
-            <p
-              style={{
-                color: "green",
-                fontWeight: "bolder",
-              }}
-            >
-              Hold this position for 5 Seconds
-            </p>
-          ) : null} */}
           <p>Rep: {rep}</p>
           {feedback && Array.isArray(feedback) && feedback.length ? (
             <p
               style={{
                 color: feedback.includes("Good job!") ? "green" : "white",
-                // fontWeight: "bolder",
               }}
             >
-              Feedback:
-              {feedback.join(", ")}
+              Feedback: {feedback.join(", ")}
             </p>
-          ) : null}
+          ) : (
+            <p>{defaultFeedback.notStarted}</p>
+          )}
         </div>
       </div>
     </div>
