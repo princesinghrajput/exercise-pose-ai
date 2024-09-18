@@ -1,4 +1,4 @@
-# Git Workflow and Commit Guidelines
+# Git Workflow and Commit Guidelines 
 
 ## Branch Management
 
