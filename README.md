@@ -1,70 +1,99 @@
-# Getting Started with Create React App
+# Git Workflow and Commit Guidelines
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Branch Management
 
-## Available Scripts
+### 1. Branch Naming Convention
+All branches should follow a consistent naming convention to clearly indicate their purpose.
 
-In the project directory, you can run:
+| Branch Type | Naming Format                                 | Example                        |
+|-------------|-----------------------------------------------|--------------------------------|
+| Feature     | `feat/<feature-name>`                         | `feat/add-user-authentication` |
+| Bug Fix     | `fix/<bug-name>`                              | `fix/login-error`              |
+| Refactor    | `refactor/<refactor-area>`                    | `refactor/database-queries`    |
+| Docs        | `docs/<documentation-update>`                 | `docs/api-instructions`        |
 
-### `npm start`
+### 2. Branching Strategy
+- Use `main` (or `master`) for production-ready code only.
+- Create a new branch for every feature, bug fix, or documentation update.
+- Avoid committing directly to `main`.
+- Use **Pull Requests (PRs)** for merging branches into `main`. Ensure all PRs are reviewed before merging.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Commit Message Guidelines
 
-### `npm test`
+### 1. Commit Message Structure
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Each commit message should follow this format:
+<keyword>: <concise description> - <author's name>
 
-### `npm run build`
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- **Keyword**: Choose from predefined keywords (listed below).
+- **Concise Description**: Briefly describe the change or addition.
+- **Author's Name**: Include the name of the committer.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### 2. Commit Keywords
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+| Keyword   | Description                                                                                   |
+|-----------|-----------------------------------------------------------------------------------------------|
+| `feat`    | A new feature or enhancement.                                                                 |
+| `fix`     | A bug fix.                                                                                     |
+| `docs`    | Documentation changes.                                                                         |
+| `style`   | Code style changes (formatting, whitespace) with no functional impact.                         |
+| `refactor`| Code changes that neither fix a bug nor add a feature (improving structure or readability).    |
+| `perf`    | Performance improvements.                                                                      |
+| `test`    | Adding or updating tests.                                                                      |
+| `chore`   | Other tasks like build process, package management, etc.                                       |
+| `ci`      | Changes to Continuous Integration configuration.                                               |
+| `revert`  | Reverts a previous commit.                                                                     |
 
-### `npm run eject`
+### 3. Commit Message Examples
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+| Action                                | Commit Message Example                                       |
+|---------------------------------------|---------------------------------------------------------------|
+| Adding a feature                      | `feat: add user authentication - John Doe`                    |
+| Fixing a bug                          | `fix: resolve login error on homepage - Jane Smith`           |
+| Updating documentation                | `docs: add API usage instructions - Sarah Lee`                |
+| Code refactoring                      | `refactor: improve query performance - Alice Johnson`         |
+| Improving performance                 | `perf: optimize image loading for dashboard - Michael Chen`   |
+| Adding tests                          | `test: add unit tests for login component - Emily Davis`      |
+| CI configuration update               | `ci: add GitHub Actions workflow - Tom Wilson`                |
+| Reverting a commit                    | `revert: undo commit abc123 - Chris White`                    |
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+---
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Best Practices
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+### 1. Atomic Commits
+Each commit should represent one logical change. Avoid combining unrelated changes in a single commit.
 
-## Learn More
+### 2. Commit Frequently
+Make small, frequent commits to keep track of your changes easily and allow for better debugging.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### 3. Pull Requests and Code Reviews
+- Always open a Pull Request to merge changes into `main`.
+- PRs should be reviewed and approved before merging.
+- Ensure each PR is small and focused on a specific task or feature.
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+---
 
-### Code Splitting
+## Workflow Example
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+1. **Create a new branch**:
+   ```bash
+   git checkout -b feat/user-authentication
 
-### Analyzing the Bundle Size
+2. **Make changes and commit:**:
+   ```bash
+   git add .
+    git commit -m "feat: add login feature - prince"
+3. **Push the branch:**
+    ```bash
+    git push origin feat/user-authentication
+4. **Create a Pull Request:**
+     - Open a PR for feat/user-authentication into main.
+     - Ensure the PR is reviewed and approved before merging.
+     - After approval, merge the PR and delete the branch.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+   
 
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
